@@ -105,6 +105,17 @@ td a:hover{text-decoration:underline}
 .dash-card h3{margin:0 0 12px;font-size:16px}
 .dash-card canvas{width:100%!important;height:270px!important}
 .dash-wide{grid-column:1/-1}
+
+.unscheduled-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;box-shadow:var(--shadow);overflow:hidden}
+.unscheduled-wrap{overflow:auto;max-height:70vh}
+.unscheduled-table{width:max-content;min-width:100%;border-collapse:collapse}
+.unscheduled-table th{position:sticky;top:0;z-index:6;background:var(--adphc-dark);color:#fff;padding:10px 12px;font-size:12px;text-align:center;white-space:nowrap}
+.unscheduled-table th:first-child{left:0;z-index:7;text-align:left;min-width:190px}
+.unscheduled-table td{padding:10px 12px;border-bottom:1px solid #e7edf2;font-size:13px;text-align:center;white-space:nowrap}
+.unscheduled-table td:first-child{position:sticky;left:0;background:#fff;text-align:left;font-weight:700;color:#28475f;z-index:4}
+.unscheduled-table tbody tr:hover td{background:#f3f9fb}
+.unscheduled-table tbody tr:hover td:first-child{background:#f3f9fb}
+.unscheduled-total{font-weight:800;background:#eef6fa}
 @media(max-width:900px){.dash-grid{grid-template-columns:1fr}.dash-wide{grid-column:auto}}
 </style></head>
 <body>
@@ -163,6 +174,7 @@ td a:hover{text-decoration:underline}
     <button class="top-tab" id="dashboardTabBtn" type="button">Dashboard</button>
     <button class="top-tab active" id="dataTabBtn" type="button">Table</button>
     <button class="top-tab" id="instructionTabBtn" type="button">INSTRUCTION</button>
+    <button class="top-tab" id="unscheduledTabBtn" type="button">Unscheduled Report</button>
   </div>
 
   <div id="dashboardPanel" style="display:none">
@@ -199,6 +211,21 @@ td a:hover{text-decoration:underline}
         <p style="margin:0">
           Once the file is uploaded, the dashboard will automatically load the work orders. Use the filters at the top to view the information you need, then switch between <strong>Dashboard</strong> and <strong>Table</strong> to review the results.
         </p>
+      </div>
+    </section>
+  </div>
+
+  <div id="unscheduledPanel" style="display:none">
+    <section class="unscheduled-card">
+      <div class="dashboard-title">
+        <h2>Unscheduled Report</h2>
+        <div id="unscheduledSummary">0 filtered records</div>
+      </div>
+      <p style="margin:0 0 14px;color:#64748b;font-size:13px">
+        Pest counts by Site Subdivision. Each row represents a pest category and each column represents a Site Subdivision. Counts are based on the pest values in the uploaded report and the filters selected above.
+      </p>
+      <div class="unscheduled-wrap" id="unscheduledWrap">
+        <div class="empty">Upload the Excel report to display the unscheduled report.</div>
       </div>
     </section>
   </div>
@@ -373,6 +400,7 @@ function apply(){
   state.page=1;
   render();
   if(document.getElementById("dashboardPanel")?.style.display!=="none") renderDashboard();
+  if(document.getElementById("unscheduledPanel")?.style.display!=="none") renderUnscheduledReport();
 }
 function renderKPIs(){
   const rows=state.filtered;
@@ -527,32 +555,127 @@ function renderDashboard(){
   dashDraw("dateChart",dashCounts(rows,r=>r.woecompleteddate,60),false);
   dashDraw("employeeChart",dashCounts(rows,r=>r.wocompletedemployee),true);
 }
-function setupTwoTabs(){
-  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn"),ib=document.getElementById("instructionTabBtn");
-  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel"),ip=document.getElementById("instructionPanel");
-  function activate(btn){
-    [db,tb,ib].forEach(x=>x.classList.remove("active"));
-    btn.classList.add("active");
-  }
-  db.onclick=()=>{
-    activate(db);
-    dp.style.display="block"; tp.style.display="none"; ip.style.display="none";
-    renderDashboard();
-  };
-  tb.onclick=()=>{
-    activate(tb);
-    dp.style.display="none"; tp.style.display="block"; ip.style.display="none";
-  };
-  ib.onclick=()=>{
-    activate(ib);
-    dp.style.display="none"; tp.style.display="none"; ip.style.display="block";
-  };
-  // Open the Instruction tab first when the page loads.
-  activate(ib);
-  dp.style.display="none";
-  tp.style.display="none";
-  ip.style.display="block";
+const UNSCHEDULED_PESTS = [
+  ["Mosquito", "mosquito"],
+  ["Flies", "flies"],
+  ["Norway Rats", "norway rat"],
+  ["Roof Rats", "roof rat"],
+  ["Fleas", "flea"],
+  ["Snake", "snake"],
+  ["Poisonous Spider", "poisonous spider"],
+  ["Scorpions", "scorp"],
+  ["Bees + Wasp", "bees + wasp"],
+  ["Other Harmful pest", "other"],
+  ["American Cockroach", "american"],
+  ["German Cockroach", "german"],
+  ["House Mouse", "house mouse"],
+  ["Non Poisonous Spiders", "non poisonous spider"],
+  ["Ants", "ants"],
+  ["Termites", "termites"],
+  ["Bed Bugs", "bed bug"],
+  ["Agricultural Pest", "agricultural"]
+];
+
+function pestMatchesCategory(pest, key){
+  const s=clean(pest).toLowerCase().replace(/\s+/g," ").trim();
+  if(!s) return false;
+  if(key==="poisonous spider") return /(^|\b)poisonous spider(\b|$)/.test(s) && !/non\s+poisonous\s+spider/.test(s);
+  if(key==="non poisonous spider") return /non\s+poisonous\s+spider/.test(s);
+  if(key==="bees + wasp") return /(^|\b)bee(s)?(\b|$)/.test(s) || /(^|\b)wasp(s)?(\b|$)/.test(s);
+  if(key==="other") return /(^|\b)other(\b|$)/.test(s);
+  if(key==="scorp") return /scorp/.test(s);
+  if(key==="american") return /american/.test(s);
+  if(key==="german") return /german/.test(s);
+  if(key==="agricultural") return /agricultural/.test(s);
+  if(key==="mosquito") return /(^|\b)mosquito(es)?(\b|$)/.test(s);
+  if(key==="flies") return /(^|\b)flies(\b|$)/.test(s);
+  if(key==="norway rat") return /norway\s+rat(s)?/.test(s);
+  if(key==="roof rat") return /roof\s+rat(s)?/.test(s);
+  if(key==="flea") return /(^|\b)flea(s)?(\b|$)/.test(s);
+  if(key==="snake") return /(^|\b)snake(s)?(\b|$)/.test(s);
+  if(key==="house mouse") return /house\s+mouse(s)?/.test(s);
+  if(key==="ants") return /(^|\b)ants(\b|$)/.test(s);
+  if(key==="termites") return /(^|\b)termites(\b|$)/.test(s);
+  if(key==="bed bug") return /bed\s+bug(s)?/.test(s);
+  return false;
 }
+
+function renderUnscheduledReport(){
+  const rows=state.filtered||[];
+  const subdivisions=[...new Set(rows.map(r=>clean(r.sitesubdivision)).filter(Boolean))].sort((a,b)=>a.localeCompare(b,undefined,{numeric:true,sensitivity:"base"}));
+  const counts=UNSCHEDULED_PESTS.map(([label,key])=>{
+    const vals={};
+    subdivisions.forEach(sub=>{
+      let total=0;
+      rows.forEach(r=>{
+        if(clean(r.sitesubdivision)!==sub) return;
+        const pests=r._pests||splitPests(r.woCompletedEventTargetPest);
+        if(key==="bees + wasp") total += pests.filter(p=>pestMatchesCategory(p,key)).length;
+        else total += pests.filter(p=>pestMatchesCategory(p,key)).length;
+      });
+      vals[sub]=total;
+    });
+    return {label,vals};
+  });
+
+  document.getElementById("unscheduledSummary").textContent=rows.length.toLocaleString()+" filtered records";
+  const wrap=document.getElementById("unscheduledWrap");
+  if(!subdivisions.length){
+    wrap.innerHTML='<div class="empty">No Site Subdivision values are available for the current filters.</div>';
+    return;
+  }
+  // Matrix layout: rows = Site Subdivision, columns = Pest categories,
+  // followed by two totals: Total Pest Count and Total Calls.
+  let html='<table class="unscheduled-table"><thead><tr><th>Site Subdivision</th>';
+  html+=UNSCHEDULED_PESTS.map(([label])=>`<th>${esc(label)}</th>`).join("");
+  html+='<th class="unscheduled-total">Total Pest Count</th><th class="unscheduled-total">Total Calls</th></tr></thead><tbody>';
+  subdivisions.forEach(sub=>{
+    const siteRows=rows.filter(r=>clean(r.sitesubdivision)===sub);
+    const siteCallTotal=siteRows.length;
+    let sitePestTotal=0;
+    html+=`<tr><td>${esc(sub)}</td>`;
+    counts.forEach(item=>{
+      const n=item.vals[sub]||0;
+      sitePestTotal += n;
+      html+=`<td>${n.toLocaleString()}</td>`;
+    });
+    html+=`<td class="unscheduled-total">${sitePestTotal.toLocaleString()}</td>`;
+    html+=`<td class="unscheduled-total">${siteCallTotal.toLocaleString()}</td></tr>`;
+  });
+  // Bottom total row: each pest total, total pest occurrences, and total calls.
+  html+='<tr class="unscheduled-total"><td>Total</td>';
+  let grandPestTotal=0;
+  counts.forEach(item=>{
+    const total=subdivisions.reduce((sum,sub)=>sum+(item.vals[sub]||0),0);
+    grandPestTotal += total;
+    html+=`<td>${total.toLocaleString()}</td>`;
+  });
+  const grandCallTotal=rows.length;
+  html+=`<td>${grandPestTotal.toLocaleString()}</td>`;
+  html+=`<td>${grandCallTotal.toLocaleString()}</td></tr>`;
+  html+='</tbody></table>';
+  wrap.innerHTML=html;
+}
+
+function setupTwoTabs(){
+  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn"),ib=document.getElementById("instructionTabBtn"),ub=document.getElementById("unscheduledTabBtn");
+  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel"),ip=document.getElementById("instructionPanel"),up=document.getElementById("unscheduledPanel");
+  const show=(active,panel)=>{
+    [db,tb,ib,ub].forEach(b=>b.classList.remove("active"));
+    active.classList.add("active");
+    [dp,tp,ip,up].forEach(p=>p.style.display="none");
+    panel.style.display="block";
+    if(panel===dp) renderDashboard();
+    if(panel===up) renderUnscheduledReport();
+  };
+  db.onclick=()=>show(db,dp);
+  tb.onclick=()=>show(tb,tp);
+  ib.onclick=()=>show(ib,ip);
+  ub.onclick=()=>show(ub,up);
+  // INSTRUCTION is the first active tab when the page opens.
+  show(ib,ip);
+}
+
 
 function loadWorkbook(file){
   const reader=new FileReader();
