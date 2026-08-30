@@ -93,7 +93,20 @@ td a:hover{text-decoration:underline}
  header{padding:14px}.container{padding:0 10px}
 }
 </style>
-</head>
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+<style>
+.top-tabs{display:flex;gap:8px;margin:0 0 18px}
+.top-tab{padding:11px 22px;border:1px solid #cbd5e1;border-radius:8px;background:#f8fafc;font-weight:700;cursor:pointer}
+.top-tab.active{background:#111827;color:#fff;border-color:#111827}
+.dashboard-title{display:flex;justify-content:space-between;align-items:center;margin-bottom:18px}
+.dashboard-title h2{margin:0}
+.dash-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.dash-card{background:#fff;border:1px solid #e2e8f0;border-radius:12px;padding:16px;min-height:330px}
+.dash-card h3{margin:0 0 12px;font-size:16px}
+.dash-card canvas{width:100%!important;height:270px!important}
+.dash-wide{grid-column:1/-1}
+@media(max-width:900px){.dash-grid{grid-template-columns:1fr}.dash-wide{grid-column:auto}}
+</style></head>
 <body>
 <header>
   <div class="header-inner">
@@ -141,9 +154,31 @@ td a:hover{text-decoration:underline}
       <div class="multi" data-filter="event"><button class="multi-btn" type="button">eventname: All</button><div class="menu"></div></div>
       <div class="multi" data-filter="pest"><button class="multi-btn" type="button">pest: All</button><div class="menu"></div></div>
       <div class="multi" data-filter="status"><button class="multi-btn" type="button">Status: All</button><div class="menu"></div></div>
+      <div class="multi" data-filter="employee"><button class="multi-btn" type="button">Employee: All</button><div class="menu"></div></div>
     </div>
   </section>
 
+  <!-- Shared navigation: filters stay above these tabs and remain visible on both views. -->
+  <div class="top-tabs">
+    <button class="top-tab" id="dashboardTabBtn" type="button">Dashboard</button>
+    <button class="top-tab active" id="dataTabBtn" type="button">Table</button>
+  </div>
+
+  <div id="dashboardPanel" style="display:none">
+    <div class="dashboard-title">
+      <h2>Emergency Work Order Dashboard</h2>
+      <div id="dashSummary">0 filtered records</div>
+    </div>
+    <div class="dash-grid">
+      <div class="dash-card"><h3>Per Site Subdivision</h3><canvas id="subdivisionChart"></canvas></div>
+      <div class="dash-card"><h3>Per Event</h3><canvas id="eventChart"></canvas></div>
+      <div class="dash-card"><h3>Per Status</h3><canvas id="statusChart"></canvas></div>
+      <div class="dash-card"><h3>Per Date</h3><canvas id="dateChart"></canvas></div>
+      <div class="dash-card dash-wide"><h3>Per Completed Employee</h3><canvas id="employeeChart"></canvas></div>
+    </div>
+  </div>
+
+  <div id="dataPanel">
   <section class="table-card">
     <div class="table-head">
       <strong>Completed Work Orders</strong>
@@ -184,7 +219,7 @@ const REQUIRED = [
 ];
 
 const state = { rows:[], filtered:[], page:1, pageSize:100,
-  filters:{date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set()} };
+  filters:{date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set(),employee:new Set()} };
 
 const esc = v => String(v ?? "").replace(/[&<>"']/g,m=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[m]));
 function clean(v){
@@ -258,10 +293,12 @@ function uniqueValues(rows,key){
 function makeFilters(){
   document.querySelectorAll(".multi").forEach(el=>{
     const key=el.dataset.filter, menu=el.querySelector(".menu");
-    const sourceKey={date:"woecompleteddate",subdivision:"sitesubdivision",event:"eventname",pest:"pest"}[key];
+    const sourceKey={date:"woecompleteddate",subdivision:"sitesubdivision",event:"eventname",pest:"pest",employee:"wocompletedemployee"}[key];
     const vals=key==="status"
-      ? [...new Set(state.rows.map(r=>clean(r._status?.text)).filter(Boolean))].sort()
-      : uniqueValues(state.rows,sourceKey);
+      ? ["Early","Overdue","No Time Data"]
+      : key==="employee"
+        ? uniqueValues(state.rows,"wocompletedemployee").filter(v=>v!=="")
+        : uniqueValues(state.rows,sourceKey);
     menu.innerHTML='<label class="all"><input type="checkbox" data-all> Select All</label>'+
       vals.map(v=>`<label><input type="checkbox" value="${esc(v)}"> ${esc(v===""?"(Blank)":v)}</label>`).join("");
     menu.querySelector("[data-all]").addEventListener("change",e=>{
@@ -269,6 +306,9 @@ function makeFilters(){
       syncFilter(key); apply();
     });
     menu.querySelectorAll('input:not([data-all])').forEach(cb=>cb.addEventListener("change",()=>{
+      const all=menu.querySelector("[data-all]");
+      const items=[...menu.querySelectorAll('input:not([data-all])')];
+      all.checked=items.length>0 && items.every(x=>x.checked);
       syncFilter(key); apply();
     }));
     el.querySelector(".multi-btn").onclick=()=>el.classList.toggle("open");
@@ -279,7 +319,7 @@ function syncFilter(key){
   const set=state.filters[key]; set.clear();
   el.querySelectorAll('.menu input:not([data-all]):checked').forEach(cb=>set.add(cb.value));
   const btn=el.querySelector(".multi-btn");
-  const label={date:"woecompleteddate",subdivision:"sitesubdivision",event:"eventname",pest:"pest",status:"Status"}[key];
+  const label={date:"woecompleteddate",subdivision:"sitesubdivision",event:"eventname",pest:"pest",status:"Status",employee:"Employee"}[key];
   btn.textContent=`${label}: ${set.size?set.size+" selected":"All"}`;
 }
 document.addEventListener("click",e=>{
@@ -299,12 +339,14 @@ function matches(row){
   if(state.filters.event.size && !state.filters.event.has(clean(row.eventname))) return false;
   if(state.filters.pest.size && !row._pests.some(p=>state.filters.pest.has(p))) return false;
   if(state.filters.status.size && !state.filters.status.has(clean((row._status||statusFor(row.woCompletedScheduleTime,row.woCompletedTimeIn)).text))) return false;
+  if(state.filters.employee.size && !state.filters.employee.has(clean(row.wocompletedemployee))) return false;
   return true;
 }
 function apply(){
   state.filtered=state.rows.filter(matches);
   state.page=1;
   render();
+  if(document.getElementById("dashboardPanel")?.style.display!=="none") renderDashboard();
 }
 function renderKPIs(){
   const rows=state.filtered;
@@ -337,7 +379,7 @@ function render(){
     ["sitesubdivision","Site Subdivision"],["businessname","Business Name"],["tfphonenumber","TF Phone Number"],
     ["woCompletedBIllingFirstName","Billing First Name"],["woCompletedBIllingLastName","Billing Last Name"],
     ["woCompletedTechnicianComments","Technician Comments"],["woCompletedScheduleTime","Schedule Time"],
-    ["woCompletedTimeIn","Time In"],["woCompletedTimeOut","Time Out"],["_status","Status"]
+    ["woCompletedTimeIn","Time In"],["woCompletedTimeOut","Time Out"],["wocompletedemployee","Completed Employee"],["_status","Status"]
   ];
   let out="<table><thead><tr>"+cols.map(c=>`<th>${esc(c[1])}</th>`).join("")+"</tr></thead><tbody>";
   for(const r of data){
@@ -349,6 +391,7 @@ function render(){
     out+=`<td>${display(r.woCompletedBIllingFirstName)}</td><td>${display(r.woCompletedBIllingLastName)}</td>`;
     out+=`<td>${display(r.woCompletedTechnicianComments)}</td><td>${display(r.woCompletedScheduleTime)}</td>`;
     out+=`<td>${display(r.woCompletedTimeIn)}</td><td>${display(r.woCompletedTimeOut)}</td>`;
+    out+=`<td>${display(r.wocompletedemployee)}</td>`;
     const st = r._status || statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn);
     out+=`<td><span class="status ${st.cls}">${esc(st.text)}</span></td>`;
     out+="</tr>";
@@ -428,6 +471,50 @@ function exportFilteredToExcel(){
   XLSX.writeFile(wb, `ADPHC_Filtered_Work_Orders_${stamp}.xlsx`);
 }
 
+
+let dashCharts={};
+function dashCounts(rows,fn,limit=30){
+  const m=new Map();
+  rows.forEach(r=>{const v=clean(fn(r))||"(Blank)";m.set(v,(m.get(v)||0)+1)});
+  return [...m.entries()].sort((a,b)=>b[1]-a[1]||a[0].localeCompare(b[0],undefined,{numeric:true,sensitivity:"base"})).slice(0,limit);
+}
+function dashDraw(id,data,horizontal=false){
+  if(!window.Chart)return;
+  if(dashCharts[id])dashCharts[id].destroy();
+  dashCharts[id]=new Chart(document.getElementById(id),{
+    type:"bar",
+    data:{labels:data.map(x=>x[0]),datasets:[{label:"Work Orders",data:data.map(x=>x[1])}]},
+    options:{
+      responsive:true,maintainAspectRatio:false,indexAxis:horizontal?"y":"x",
+      plugins:{legend:{display:false}},
+      scales:{x:{beginAtZero:true},y:{beginAtZero:true}}
+    }
+  });
+}
+function renderDashboard(){
+  const rows=state.filtered||[];
+  const st=r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text;
+  document.getElementById("dashSummary").textContent=rows.length.toLocaleString()+" filtered records";
+  dashDraw("subdivisionChart",dashCounts(rows,r=>r.sitesubdivision),true);
+  dashDraw("eventChart",dashCounts(rows,r=>r.eventname),true);
+  dashDraw("statusChart",dashCounts(rows,st,2),false);
+  dashDraw("dateChart",dashCounts(rows,r=>r.woecompleteddate,60),false);
+  dashDraw("employeeChart",dashCounts(rows,r=>r.wocompletedemployee),true);
+}
+function setupTwoTabs(){
+  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn");
+  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel");
+  db.onclick=()=>{
+    db.classList.add("active"); tb.classList.remove("active");
+    dp.style.display="block"; tp.style.display="none";
+    renderDashboard();
+  };
+  tb.onclick=()=>{
+    tb.classList.add("active"); db.classList.remove("active");
+    dp.style.display="none"; tp.style.display="block";
+  };
+}
+
 function loadWorkbook(file){
   const reader=new FileReader();
   reader.onload=e=>{
@@ -449,7 +536,7 @@ function loadWorkbook(file){
         return normalizeRow(n);
       });
       // Keep all property records, including Villa. Property Type is intentionally not displayed as a table column.
-      state.rows=rows; state.filtered=rows; state.filters={date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set()};
+      state.rows=rows; state.filtered=rows; state.filters={date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set(),employee:new Set()};
       document.getElementById("fileName").textContent=`Loaded: ${file.name} | ${rows.length.toLocaleString()} rows`;
       document.getElementById("dropZone").style.display="none";
       document.getElementById("error").style.display="none";
@@ -460,12 +547,13 @@ function loadWorkbook(file){
   };
   reader.readAsArrayBuffer(file);
 }
+setupTwoTabs();
 document.getElementById("fileInput").addEventListener("change",e=>{if(e.target.files[0])loadWorkbook(e.target.files[0])});
 document.getElementById("search").addEventListener("input",apply);
 document.getElementById("exportExcelBtn").addEventListener("click", exportFilteredToExcel);
 document.getElementById("clearBtn").addEventListener("click",()=>{
   document.getElementById("search").value="";
-  state.filters={date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set()};
+  state.filters={date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set(),employee:new Set()};
   makeFilters(); apply();
 });
 document.getElementById("pageSize").addEventListener("change",e=>{state.pageSize=Number(e.target.value);state.page=1;render()});
@@ -477,5 +565,6 @@ const dz=document.getElementById("dropZone");
 ["dragleave","drop"].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();dz.classList.remove("drag")}));
 dz.addEventListener("drop",e=>{const f=e.dataTransfer.files[0];if(f)loadWorkbook(f)});
 </script>
+</div>
 </body>
 </html>
