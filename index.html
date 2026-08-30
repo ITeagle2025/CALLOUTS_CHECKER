@@ -162,6 +162,7 @@ td a:hover{text-decoration:underline}
   <div class="top-tabs">
     <button class="top-tab" id="dashboardTabBtn" type="button">Dashboard</button>
     <button class="top-tab active" id="dataTabBtn" type="button">Table</button>
+    <button class="top-tab" id="instructionTabBtn" type="button">INSTRUCTION</button>
   </div>
 
   <div id="dashboardPanel" style="display:none">
@@ -176,6 +177,30 @@ td a:hover{text-decoration:underline}
       <div class="dash-card"><h3>Per Date</h3><canvas id="dateChart"></canvas></div>
       <div class="dash-card dash-wide"><h3>Per Completed Employee</h3><canvas id="employeeChart"></canvas></div>
     </div>
+  </div>
+
+  <div id="instructionPanel" style="display:none">
+    <section class="table-card" style="padding:28px 30px">
+      <div class="dashboard-title">
+        <h2>How to Use the Dashboard</h2>
+      </div>
+      <div style="font-size:15px;line-height:1.8;color:#334e68;max-width:900px">
+        <h3 style="color:#003f6b;margin:0 0 8px">Step 1 — Download the Report</h3>
+        <p style="margin:0 0 20px">
+          Click <a href="https://sproglobalreporting.theservicepro.net/msrs/criteria.aspx?reportid=5256&reporttype=CustomerReport&categoryid=11&from=iscore" target="_blank" rel="noopener" style="color:#005b96;font-weight:700">ServSuite Report Criteria</a> to open the report page and download the required Excel report.
+        </p>
+
+        <h3 style="color:#003f6b;margin:0 0 8px">Step 2 — Upload the Report</h3>
+        <p style="margin:0 0 20px">
+          After downloading the report, return to this dashboard and <strong>drag the Excel file into the upload area</strong> at the top of the page, or click <strong>Choose Excel File</strong> to select it from your computer.
+        </p>
+
+        <h3 style="color:#003f6b;margin:0 0 8px">Step 3 — Review the Data</h3>
+        <p style="margin:0">
+          Once the file is uploaded, the dashboard will automatically load the work orders. Use the filters at the top to view the information you need, then switch between <strong>Dashboard</strong> and <strong>Table</strong> to review the results.
+        </p>
+      </div>
+    </section>
   </div>
 
   <div id="dataPanel">
@@ -202,6 +227,7 @@ td a:hover{text-decoration:underline}
       </div>
     </div>
   </section>
+  </div>
 
   <div class="footer">
     Data source: user-uploaded Excel template. Property Type is not displayed in the table; Villa records are retained. Blank values are preserved and displayed as “—”.
@@ -502,17 +528,30 @@ function renderDashboard(){
   dashDraw("employeeChart",dashCounts(rows,r=>r.wocompletedemployee),true);
 }
 function setupTwoTabs(){
-  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn");
-  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel");
+  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn"),ib=document.getElementById("instructionTabBtn");
+  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel"),ip=document.getElementById("instructionPanel");
+  function activate(btn){
+    [db,tb,ib].forEach(x=>x.classList.remove("active"));
+    btn.classList.add("active");
+  }
   db.onclick=()=>{
-    db.classList.add("active"); tb.classList.remove("active");
-    dp.style.display="block"; tp.style.display="none";
+    activate(db);
+    dp.style.display="block"; tp.style.display="none"; ip.style.display="none";
     renderDashboard();
   };
   tb.onclick=()=>{
-    tb.classList.add("active"); db.classList.remove("active");
-    dp.style.display="none"; tp.style.display="block";
+    activate(tb);
+    dp.style.display="none"; tp.style.display="block"; ip.style.display="none";
   };
+  ib.onclick=()=>{
+    activate(ib);
+    dp.style.display="none"; tp.style.display="none"; ip.style.display="block";
+  };
+  // Open the Instruction tab first when the page loads.
+  activate(ib);
+  dp.style.display="none";
+  tp.style.display="none";
+  ip.style.display="block";
 }
 
 function loadWorkbook(file){
