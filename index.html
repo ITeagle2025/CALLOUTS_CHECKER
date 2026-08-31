@@ -37,12 +37,13 @@ input[type=file]{display:none}
 .file-label{display:inline-block;background:var(--adphc);color:white;padding:11px 18px;border-radius:7px;cursor:pointer;font-weight:700}
 .file-name{margin-top:8px;font-size:12px;color:var(--gray)}
 .error{display:none;margin-top:12px;padding:12px;border-radius:8px;background:#fff0f0;color:#8b1e1e;text-align:left}
-.kpis{display:grid;grid-template-columns:repeat(5,1fr);gap:14px;margin:18px 0}
+.kpis{display:grid;grid-template-columns:repeat(6,1fr);gap:14px;margin:18px 0}
 .card{background:var(--white);border-radius:11px;padding:16px;box-shadow:var(--shadow);border-top:4px solid var(--adphc)}
 .card:nth-child(2){border-top-color:var(--green)}
 .card:nth-child(3){border-top-color:var(--danger)}
 .card:nth-child(4){border-top-color:var(--eagle)}
 .card:nth-child(5){border-top-color:#7b8794}
+.card:nth-child(6){border-top-color:#f59e0b}
 .card .label{font-size:12px;color:var(--gray);font-weight:700;text-transform:uppercase;letter-spacing:.5px}
 .card .value{font-size:27px;font-weight:800;color:var(--adphc-dark);margin-top:6px}
 .controls{background:var(--white);border-radius:11px;padding:16px;box-shadow:var(--shadow);margin-bottom:16px}
@@ -77,6 +78,7 @@ td a:hover{text-decoration:underline}
 .status{display:inline-block;padding:4px 8px;border-radius:999px;font-size:11px;font-weight:800}
 .status.early{background:#e8f7ed;color:#087a3b}
 .status.overdue{background:#ffebeb;color:#b21f1f}
+.status.advance{background:#fff4db;color:#a15c00}
 .status.nodata{background:#eef2f5;color:#64748b}
 .footer{padding:15px 0 25px;color:var(--gray);font-size:11px}
 .empty{padding:45px;text-align:center;color:var(--gray)}
@@ -149,6 +151,7 @@ td a:hover{text-decoration:underline}
     <div class="card"><div class="label">Total Work Orders</div><div class="value" id="kTotal">0</div></div>
     <div class="card"><div class="label">Early / Within 2 Hours</div><div class="value" id="kEarly">0</div></div>
     <div class="card"><div class="label">Overdue / Over 2 Hours</div><div class="value" id="kOverdue">0</div></div>
+    <div class="card"><div class="label">Advance</div><div class="value" id="kAdvance">0</div></div>
     <div class="card"><div class="label">Unique Subdivisions</div><div class="value" id="kSites">0</div></div>
     <div class="card"><div class="label">Unique Pests</div><div class="value" id="kPests">0</div></div>
   </section>
@@ -175,6 +178,7 @@ td a:hover{text-decoration:underline}
     <button class="top-tab active" id="dataTabBtn" type="button">Table</button>
     <button class="top-tab" id="instructionTabBtn" type="button">INSTRUCTION</button>
     <button class="top-tab" id="unscheduledTabBtn" type="button">Unscheduled Report</button>
+    <button class="top-tab" id="emergencyTabBtn" type="button">Emergency Data</button>
   </div>
 
   <div id="dashboardPanel" style="display:none">
@@ -230,6 +234,39 @@ td a:hover{text-decoration:underline}
     </section>
   </div>
 
+  <div id="emergencyPanel" style="display:none">
+    <section class="unscheduled-card">
+      <div class="dashboard-title">
+        <h2>Emergency Case Response Time</h2>
+        <div id="emergencySummary">0 filtered records</div>
+      </div>
+      <p style="margin:0 0 14px;color:#64748b;font-size:13px">
+        Shows only rows where <strong>eventname</strong> = "EMERGENCY CASE - PEST CONTROL SERVICE" (filters above still apply).
+        Compares <strong>woCompletedScheduleTime</strong> vs <strong>woCompletedTimeIn</strong> — the gap must be
+        <strong>2 hours or less</strong> to be compliant.
+      </p>
+      <div class="kpis" style="grid-template-columns:repeat(5,1fr);margin:0 0 16px">
+        <div class="card"><div class="label">Emergency Work Orders</div><div class="value" id="eTotal">0</div></div>
+        <div class="card"><div class="label">Within 2 Hours</div><div class="value" id="eCompliant">0</div></div>
+        <div class="card"><div class="label">Over 2 Hours</div><div class="value" id="eNonCompliant">0</div></div>
+        <div class="card"><div class="label">Advance</div><div class="value" id="eAdvance">0</div></div>
+        <div class="card"><div class="label">No Time Data</div><div class="value" id="eNoData">0</div></div>
+      </div>
+      <div class="table-head" style="padding:0 0 14px;border:0">
+        <strong>Export</strong>
+        <button class="btn-primary" id="exportAdjustedBtn" type="button">Export Full Report (Schedule Time Adjusted)</button>
+      </div>
+      <p style="margin:0 0 14px;color:#64748b;font-size:13px">
+        The export includes <strong>all rows</strong> from the uploaded file (filters/search are ignored). Only rows where
+        eventname is "EMERGENCY CASE - PEST CONTROL SERVICE" and the gap exceeds 2 hours get <strong>woCompletedScheduleTime</strong>
+        adjusted so it falls within 2 hours of woCompletedTimeIn. woCompletedTimeIn and every other column are left unchanged.
+      </p>
+      <div class="unscheduled-wrap" id="emergencyWrap">
+        <div class="empty">Upload the Excel report to display emergency case data.</div>
+      </div>
+    </section>
+  </div>
+
   <div id="dataPanel">
   <section class="table-card">
     <div class="table-head">
@@ -258,7 +295,7 @@ td a:hover{text-decoration:underline}
 
   <div class="footer">
     Data source: user-uploaded Excel template. Property Type is not displayed in the table; Villa records are retained. Blank values are preserved and displayed as “—”.
-    Status rule: Time In − Schedule Time ≤ 2 hours = <b>Early</b>; over 2 hours = <b>Overdue</b>.
+    Status rule: Schedule Time ahead of Time In = <b>Advance</b>; Time In − Schedule Time ≤ 2 hours = <b>Early</b>; over 2 hours = <b>Overdue</b>.
     If either time is missing/unreadable, Status is shown as “No Time Data”.
   </div>
 </main>
@@ -287,8 +324,19 @@ function display(v){ const s=clean(v); return s==="" ? "—" : esc(s); }
 function splitPests(v){
   let s=clean(v);
   if(!s) return [];
-  // Source data uses "/" as the separator; remove empty trailing slash fragments.
-  return s.split("/").map(x=>x.trim()).filter(Boolean);
+  // Trim each target-pest value first, remove empty fragments, then de-duplicate
+  // within the same work-order row. A pest is therefore counted once per row.
+  const seen=new Set();
+  const out=[];
+  s.split("/").forEach(x=>{
+    const pest=x.trim();
+    if(!pest) return;
+    const key=pest.toLowerCase().replace(/\s+/g," ").trim();
+    if(seen.has(key)) return;
+    seen.add(key);
+    out.push(pest);
+  });
+  return out;
 }
 function pestHtml(v){
   const a=splitPests(v);
@@ -319,6 +367,7 @@ function statusFor(schedule, timeIn){
   let diff=t-s;
   // Crossing midnight: interpret a small negative value as next-day completion.
   if(diff < -720) diff += 1440;
+  if(diff < 0) return {text:"Advance",cls:"advance",diff};
   return diff <= 120
     ? {text:"Early",cls:"early",diff}
     : {text:"Overdue",cls:"overdue",diff};
@@ -401,12 +450,14 @@ function apply(){
   render();
   if(document.getElementById("dashboardPanel")?.style.display!=="none") renderDashboard();
   if(document.getElementById("unscheduledPanel")?.style.display!=="none") renderUnscheduledReport();
+  if(document.getElementById("emergencyPanel")?.style.display!=="none") renderEmergencyReport();
 }
 function renderKPIs(){
   const rows=state.filtered;
   document.getElementById("kTotal").textContent=rows.length.toLocaleString();
   document.getElementById("kEarly").textContent=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Early").length.toLocaleString();
   document.getElementById("kOverdue").textContent=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Overdue").length.toLocaleString();
+  document.getElementById("kAdvance").textContent=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Advance").length.toLocaleString();
   const subs=new Set(rows.map(r=>clean(r.sitesubdivision)).filter(x=>x!==""));
   document.getElementById("kSites").textContent=subs.size.toLocaleString();
   const pests=new Set(rows.flatMap(r=>r._pests));
@@ -557,14 +608,15 @@ function renderDashboard(){
 }
 const UNSCHEDULED_PESTS = [
   ["Mosquito", "mosquito"],
+  
   ["Flies", "flies"],
   ["Norway Rats", "norway rat"],
-  ["Roof Rats", "roof rat"],
+  ["Roof Rats", "roof rat"],["Ticks", "ticks"],
   ["Fleas", "flea"],
   ["Snake", "snake"],
   ["Poisonous Spider", "poisonous spider"],
   ["Scorpions", "scorp"],
-  ["Bees + Wasp", "bees + wasp"],
+  ["Bees + Wasp", "bees_plus_wasp"],
   ["Other Harmful pest", "other"],
   ["American Cockroach", "american"],
   ["German Cockroach", "german"],
@@ -572,32 +624,17 @@ const UNSCHEDULED_PESTS = [
   ["Non Poisonous Spiders", "non poisonous spider"],
   ["Ants", "ants"],
   ["Termites", "termites"],
-  ["Bed Bugs", "bed bug"],
+  ["Bed Bugs", "bed bug"],["Lizard","lizard"],
   ["Agricultural Pest", "agricultural"]
 ];
 
-function pestMatchesCategory(pest, key){
-  const s=clean(pest).toLowerCase().replace(/\s+/g," ").trim();
-  if(!s) return false;
-  if(key==="poisonous spider") return /(^|\b)poisonous spider(\b|$)/.test(s) && !/non\s+poisonous\s+spider/.test(s);
-  if(key==="non poisonous spider") return /non\s+poisonous\s+spider/.test(s);
-  if(key==="bees + wasp") return /(^|\b)bee(s)?(\b|$)/.test(s) || /(^|\b)wasp(s)?(\b|$)/.test(s);
-  if(key==="other") return /(^|\b)other(\b|$)/.test(s);
-  if(key==="scorp") return /scorp/.test(s);
-  if(key==="american") return /american/.test(s);
-  if(key==="german") return /german/.test(s);
-  if(key==="agricultural") return /agricultural/.test(s);
-  if(key==="mosquito") return /(^|\b)mosquito(es)?(\b|$)/.test(s);
-  if(key==="flies") return /(^|\b)flies(\b|$)/.test(s);
-  if(key==="norway rat") return /norway\s+rat(s)?/.test(s);
-  if(key==="roof rat") return /roof\s+rat(s)?/.test(s);
-  if(key==="flea") return /(^|\b)flea(s)?(\b|$)/.test(s);
-  if(key==="snake") return /(^|\b)snake(s)?(\b|$)/.test(s);
-  if(key==="house mouse") return /house\s+mouse(s)?/.test(s);
-  if(key==="ants") return /(^|\b)ants(\b|$)/.test(s);
-  if(key==="termites") return /(^|\b)termites(\b|$)/.test(s);
-  if(key==="bed bug") return /bed\s+bug(s)?/.test(s);
-  return false;
+function pestMatchesCategory(pest,key){
+  const p=clean(pest).toLowerCase().replace(/\s+/g," ").trim();
+  const k=clean(key).toLowerCase().trim();
+  if(k==="bees_plus_wasp") return p.includes("bee") || p.includes("wasp");
+  if(k==="poisonous spider") return p.includes("poisonous spider") && !p.includes("non poisonous spider");
+  if(k==="non poisonous spider") return p.includes("non poisonous spider");
+  return p.includes(k);
 }
 
 function renderUnscheduledReport(){
@@ -610,8 +647,15 @@ function renderUnscheduledReport(){
       rows.forEach(r=>{
         if(clean(r.sitesubdivision)!==sub) return;
         const pests=r._pests||splitPests(r.woCompletedEventTargetPest);
-        if(key==="bees + wasp") total += pests.filter(p=>pestMatchesCategory(p,key)).length;
-        else total += pests.filter(p=>pestMatchesCategory(p,key)).length;
+        // Count each pest category once per work-order row, even if the source
+        // Target Pest field repeats the same pest (e.g. Mosquito Adult twice).
+        if(key==="bees_plus_wasp"){
+          const hasBees=pests.some(p=>clean(p).toLowerCase().includes("bee"));
+          const hasWasp=pests.some(p=>clean(p).toLowerCase().includes("wasp"));
+          total += (hasBees?1:0) + (hasWasp?1:0);
+        }else{
+          total += pests.some(p=>pestMatchesCategory(p,key)) ? 1 : 0;
+        }
       });
       vals[sub]=total;
     });
@@ -657,21 +701,184 @@ function renderUnscheduledReport(){
   wrap.innerHTML=html;
 }
 
+const EMERGENCY_EVENT_NAME = "EMERGENCY CASE - PEST CONTROL SERVICE";
+function isEmergencyRow(r){
+  return clean(r.eventname).toUpperCase() === EMERGENCY_EVENT_NAME;
+}
+
+// Detects the display style of a source time string so an adjusted time can be
+// written back in a matching style (12-hour with AM/PM, or 24-hour with/without seconds).
+function detectTimeFormat(v){
+  const s=clean(v);
+  const hasMeridiem = /[AaPp][Mm]/.test(s);
+  const hasSeconds = /^\d{1,2}:\d{2}:\d{2}/.test(s);
+  return {hasMeridiem, hasSeconds};
+}
+function minutesToTimeString(mins, fmt){
+  let m = ((mins % 1440) + 1440) % 1440; // wrap into a single day
+  let h = Math.floor(m/60), mm = m%60;
+  const pad = n => String(n).padStart(2,"0");
+  if(fmt.hasMeridiem){
+    const ap = h>=12 ? "PM" : "AM";
+    let h12 = h % 12; if(h12===0) h12=12;
+    return fmt.hasSeconds ? `${h12}:${pad(mm)}:00 ${ap}` : `${h12}:${pad(mm)} ${ap}`;
+  }
+  return fmt.hasSeconds ? `${pad(h)}:${pad(mm)}:00` : `${pad(h)}:${pad(mm)}`;
+}
+// Returns the adjusted woCompletedScheduleTime for a row (or the original value if
+// no adjustment is needed/possible). Only the schedule time is ever changed — the
+// time-in value and every other field are left untouched.
+function adjustedScheduleTime(r){
+  const original = r.woCompletedScheduleTime;
+  if(!isEmergencyRow(r)) return original;
+  const s = timeToMinutes(original), t = timeToMinutes(r.woCompletedTimeIn);
+  if(s===null || t===null) return original;
+  let diff = t - s;
+  if(diff < -720) diff += 1440;
+  // Emergency schedule must be within 0–2 hours before Time In.
+  // If the schedule is in advance, move it to 30 minutes before Time In.
+  // Example: Schedule 8:00 AM / Time In 7:30 AM -> 7:00 AM.
+  if(diff < 0){
+    const newScheduleMinutes = t - 30;
+    return minutesToTimeString(newScheduleMinutes, detectTimeFormat(original));
+  }
+  if(diff > 120){
+    const newScheduleMinutes = t - 120;
+    return minutesToTimeString(newScheduleMinutes, detectTimeFormat(original));
+  }
+  return original;
+}
+
+function renderEmergencyReport(){
+  const rows=(state.filtered||[]).filter(isEmergencyRow);
+  const compliant=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Early");
+  const overdue=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Overdue");
+  const advance=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="Advance");
+  const nodata=rows.filter(r=>(r._status||statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn)).text==="No Time Data");
+
+  document.getElementById("emergencySummary").textContent=rows.length.toLocaleString()+" filtered records";
+  document.getElementById("eTotal").textContent=rows.length.toLocaleString();
+  document.getElementById("eCompliant").textContent=compliant.length.toLocaleString();
+  document.getElementById("eNonCompliant").textContent=overdue.length.toLocaleString();
+  document.getElementById("eAdvance").textContent=advance.length.toLocaleString();
+  document.getElementById("eNoData").textContent=nodata.length.toLocaleString();
+
+  const wrap=document.getElementById("emergencyWrap");
+  if(!rows.length){
+    wrap.innerHTML='<div class="empty">No emergency case records match the current search/filter selection.</div>';
+    return;
+  }
+  let html='<table class="unscheduled-table"><thead><tr><th style="text-align:left">WO Event ID</th><th style="text-align:left">Completed Date</th>'+
+    '<th style="text-align:left">Site Subdivision</th><th>Schedule Time</th><th>Time In</th><th>Gap</th><th>Status</th><th>Adjusted Schedule Time</th></tr></thead><tbody>';
+  rows.forEach(r=>{
+    const st = r._status || statusFor(r.woCompletedScheduleTime,r.woCompletedTimeIn);
+    let gap="—";
+    if(st.diff!==null){
+      const gh=Math.floor(Math.abs(st.diff)/60), gm=Math.abs(st.diff)%60;
+      gap=(st.diff<0?"-":"")+gh+"h "+gm+"m";
+    }
+    const adj=adjustedScheduleTime(r);
+    const adjChanged = clean(adj)!==clean(r.woCompletedScheduleTime);
+    html+="<tr>";
+    html+=`<td style="text-align:left">${display(r.woeventid)}</td><td style="text-align:left">${display(r.woecompleteddate)}</td>`;
+    html+=`<td style="text-align:left">${display(r.sitesubdivision)}</td>`;
+    html+=`<td>${display(r.woCompletedScheduleTime)}</td><td>${display(r.woCompletedTimeIn)}</td><td>${esc(gap)}</td>`;
+    html+=`<td><span class="status ${st.cls}">${esc(st.text)}</span></td>`;
+    html+=`<td>${adjChanged?`<strong>${display(adj)}</strong>`:display(adj)}</td>`;
+    html+="</tr>";
+  });
+  html+="</tbody></table>";
+  wrap.innerHTML=html;
+}
+
+function exportAdjustedScheduleExcel(){
+  const rows = state.rows || []; // full, unfiltered data set
+  if(!rows.length){
+    alert("Upload the Excel report before exporting.");
+    return;
+  }
+
+  const cols=[
+    ["woeventid","WO Event ID"],
+    ["woecompleteddate","Completed Date"],
+    ["programPOnum","Program PO Number"],
+    ["eventname","Event Name"],
+    ["sitesubdivision","Site Subdivision"],
+    ["businessname","Business Name"],
+    ["tfphonenumber","TF Phone Number"],
+    ["woCompletedBIllingFirstName","Billing First Name"],
+    ["woCompletedBIllingLastName","Billing Last Name"],
+    ["woCompletedTechnicianComments","Technician Comments"],
+    ["woCompletedScheduleTime","Schedule Time"],
+    ["woCompletedTimeIn","Time In"],
+    ["woCompletedTimeOut","Time Out"],
+    ["wocompletedemployee","Completed Employee"]
+  ];
+
+  // Every row from the upload is included, unfiltered. Only woCompletedScheduleTime
+  // is ever modified, and only for EMERGENCY CASE - PEST CONTROL SERVICE rows whose
+  // schedule is outside the allowed window (ahead of Time In or more than 2 hours before Time In). All other fields (including
+  // woCompletedTimeIn) are copied through exactly as uploaded.
+  const exportRows = rows.map(r=>{
+    const obj={};
+    cols.forEach(([key,label])=>{
+      obj[label] = key==="woCompletedScheduleTime" ? clean(adjustedScheduleTime(r)) : clean(r[key]);
+    });
+    return obj;
+  });
+
+  const ws = XLSX.utils.json_to_sheet(exportRows);
+
+  rows.forEach((r,i)=>{
+    const cell = XLSX.utils.encode_cell({r:i+1, c:0});
+    const woid = clean(r.woeventid);
+    if(woid){
+      ws[cell] = ws[cell] || {t:"s", v:woid};
+      ws[cell].l = {
+        Target: `https://sproglobal.theservicepro.net/account/workorderdetailedit.aspx?woid=${encodeURIComponent(woid)}`,
+        Tooltip: "Open Work Order"
+      };
+    }
+  });
+
+  ws["!cols"] = [
+    {wch:16},{wch:16},{wch:18},{wch:28},{wch:22},{wch:30},{wch:18},
+    {wch:20},{wch:20},{wch:45},{wch:18},{wch:14},{wch:14},{wch:20}
+  ];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, "All Work Orders (Adjusted)");
+
+  const now = new Date();
+  const stamp = [
+    now.getFullYear(),
+    String(now.getMonth()+1).padStart(2,"0"),
+    String(now.getDate()).padStart(2,"0"),
+    "_",
+    String(now.getHours()).padStart(2,"0"),
+    String(now.getMinutes()).padStart(2,"0")
+  ].join("");
+
+  XLSX.writeFile(wb, `ADPHC_Full_Report_Schedule_Adjusted_${stamp}.xlsx`);
+}
+
 function setupTwoTabs(){
-  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn"),ib=document.getElementById("instructionTabBtn"),ub=document.getElementById("unscheduledTabBtn");
-  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel"),ip=document.getElementById("instructionPanel"),up=document.getElementById("unscheduledPanel");
+  const db=document.getElementById("dashboardTabBtn"),tb=document.getElementById("dataTabBtn"),ib=document.getElementById("instructionTabBtn"),ub=document.getElementById("unscheduledTabBtn"),eb=document.getElementById("emergencyTabBtn");
+  const dp=document.getElementById("dashboardPanel"),tp=document.getElementById("dataPanel"),ip=document.getElementById("instructionPanel"),up=document.getElementById("unscheduledPanel"),ep=document.getElementById("emergencyPanel");
   const show=(active,panel)=>{
-    [db,tb,ib,ub].forEach(b=>b.classList.remove("active"));
+    [db,tb,ib,ub,eb].forEach(b=>b.classList.remove("active"));
     active.classList.add("active");
-    [dp,tp,ip,up].forEach(p=>p.style.display="none");
+    [dp,tp,ip,up,ep].forEach(p=>p.style.display="none");
     panel.style.display="block";
     if(panel===dp) renderDashboard();
     if(panel===up) renderUnscheduledReport();
+    if(panel===ep) renderEmergencyReport();
   };
   db.onclick=()=>show(db,dp);
   tb.onclick=()=>show(tb,tp);
   ib.onclick=()=>show(ib,ip);
   ub.onclick=()=>show(ub,up);
+  eb.onclick=()=>show(eb,ep);
   // INSTRUCTION is the first active tab when the page opens.
   show(ib,ip);
 }
@@ -713,6 +920,7 @@ setupTwoTabs();
 document.getElementById("fileInput").addEventListener("change",e=>{if(e.target.files[0])loadWorkbook(e.target.files[0])});
 document.getElementById("search").addEventListener("input",apply);
 document.getElementById("exportExcelBtn").addEventListener("click", exportFilteredToExcel);
+document.getElementById("exportAdjustedBtn").addEventListener("click", exportAdjustedScheduleExcel);
 document.getElementById("clearBtn").addEventListener("click",()=>{
   document.getElementById("search").value="";
   state.filters={date:new Set(),subdivision:new Set(),event:new Set(),pest:new Set(),status:new Set(),employee:new Set()};
